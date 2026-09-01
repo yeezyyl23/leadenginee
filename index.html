@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lead Engine — Wer zuerst anruft, bekommt den Auftrag.</title>
+<meta name="description" content="Lead Engine zeigt Handwerksbetrieben in Echtzeit, welche Anfrage jetzt Vorrang hat. Damit der nächste Auftrag nicht an den Betrieb geht, der schneller war." />
+<meta property="og:title" content="Lead Engine — Wer zuerst anruft, bekommt den Auftrag." />
+<meta property="og:description" content="Automatische Priorisierung eingehender Anfragen für Handwerksbetriebe." />
+<meta property="og:type" content="website" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230A0908'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' fill='%23FF5A5F' text-anchor='middle'%3ELE%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Google Fonts & Calendly are loaded dynamically via JS, only after cookie consent (see bottom of page). This is required so IP addresses are not sent to Google/Calendly before the visitor has agreed — see German court rulings on Google Fonts + GDPR. -->
+<!-- Calendly's widget.css/widget.js are also loaded dynamically after consent, further down. -->
+<style>
+  :root{
+    --bg:#0A0908; --surface:#131011; --surface-2:#1B1717; --ink:#F4F0ED; --muted:#9C938E; --muted-dim:#6E6660;
+    --border:#262120; --border-strong:#3A3230;
+    --red:#B3202C; --red-bright:#FF5A5F; --red-deep:#7A151F;
+    --line: rgba(244,240,237,0.1);
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth; background:#0A0908;}
+  body{
+    margin:0; color:var(--ink); padding-top:60px;
+    font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden; line-height:1.5;
+  }
+  /* subtle film-grain — the kind of texture that keeps a flat dark bg from looking like a template */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  h1,h2,h3,.serif{ font-family:'IBM Plex Sans',sans-serif; letter-spacing:-0.01em; font-weight:600; }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+  a{ color:inherit; text-decoration:none; }
+  img,svg{ display:block; max-width:100%; }
+  .wrap{ max-width:1120px; margin:0 auto; padding:0 24px; position:relative; z-index:2; }
+  .muted{ color:var(--muted); }
+  section{ position:relative; scroll-margin-top:80px; }
+  main{ position:relative; display:block; }
+  hr.rule{ border:none; border-top:1px solid var(--line); margin:0; }
+
+  /* ---------- NAV ---------- */
+  .nav{
+    position:fixed; top:0; left:0; right:0; z-index:50; background:rgba(10,9,8,0.75);
+    backdrop-filter:saturate(160%) blur(12px); border-bottom:1px solid var(--line);
+    transform:translateY(0); transition:transform .35s ease, background .3s ease;
+  }
+  .nav.nav-hidden{ transform:translateY(-100%); }
+  .nav.nav-scrolled{ background:rgba(10,9,8,0.94); }
+  .nav-inner{ max-width:1120px; margin:0 auto; padding:13px 24px; display:flex; align-items:center; justify-content:space-between; }
+  .brand{ font-family:'IBM Plex Sans',sans-serif; font-weight:700; font-size:16px; display:flex; align-items:center; gap:9px; }
+  .brand span{ color:var(--red-bright); font-style:normal; }
+  .logo-mark{ flex-shrink:0; }
+  .nav-links{ display:flex; align-items:center; gap:28px; }
+  .nav-links a{ font-size:13px; font-weight:500; color:var(--muted); transition:color .15s; }
+  .nav-links a:hover{ color:var(--ink); }
+  .nav-cta{ display:flex; align-items:center; gap:12px; }
+  .nav-toggle{ display:none; background:none; border:none; cursor:pointer; padding:6px; }
+  .nav-mobile{ display:none; border-top:1px solid var(--line); padding:14px 24px; flex-direction:column; gap:14px; }
+  .nav-mobile.show{ display:flex; }
+
+  /* ---------- BUTTONS ---------- */
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; font-weight:600; font-size:13.5px;
+    padding:12px 22px; border-radius:8px; border:1px solid transparent; cursor:pointer; transition:opacity .15s, border-color .15s, background .15s; white-space:nowrap; }
+  .btn:active{ opacity:0.85; }
+  .btn-primary{ background:var(--ink); color:#0A0908; }
+  .btn-primary:hover{ background:#fff; }
+  .btn-accent{ background:var(--red); color:#fff; }
+  .btn-accent:hover{ background:var(--red-bright); }
+  .btn-ghost{ background:transparent; color:var(--ink); border-color:var(--border-strong); }
+  .btn-ghost:hover{ border-color:var(--muted); }
+  .btn-lg{ padding:14px 26px; font-size:14px; }
+
+  /* ---------- SECTION LABEL ---------- */
+  .label{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--red-bright); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .label::before{ content:""; width:16px; height:1px; background:var(--red-bright); display:inline-block; }
+
+  /* ---------- HERO ---------- */
+  .hero{ padding:76px 0 90px; }
+  .hero-grid{ display:grid; grid-template-columns:1.15fr 0.85fr; gap:64px; align-items:end; }
+  .hero h1{ font-size:54px; line-height:1.04; font-weight:600; margin:0 0 26px; }
+  .hero h1 em{ font-style:normal; color:var(--red-bright); font-weight:700; }
+  .hero-sub{ font-size:17px; line-height:1.65; color:var(--muted); max-width:480px; margin:0 0 34px; }
+  .hero-ctas{ display:flex; gap:12px; margin-bottom:28px; flex-wrap:wrap; }
+  .hero-note{ font-size:12.5px; color:var(--muted-dim); border-left:2px solid var(--border-strong); padding-left:12px; max-width:420px; }
+
+  /* Before/After storytelling device replacing generic tech decoration */
+  .compare-stack{ position:relative; height:400px; }
+  .compare-card{ position:absolute; width:100%; border-radius:var(--radius); padding:22px; background:var(--surface); border:1px solid var(--border); }
+  .compare-card.before{ top:0; left:0; width:82%; opacity:0.6; filter:grayscale(0.4); transform:rotate(-2deg); z-index:1; }
+  .compare-card.after{ bottom:0; right:0; width:88%; z-index:2; border-color:var(--border-strong); box-shadow:0 30px 70px rgba(0,0,0,0.5); transform:perspective(1000px) rotateX(1deg) rotateY(-1deg); transition:transform .2s ease-out; transform-style:preserve-3d; }
+
+  /* Touch devices have no mousemove, so the JS tilt handler never fires there.
+     Give them a real, always-visible 3D motion instead: a slow, continuous
+     tilt animation. Only applies where there's no fine pointer (i.e. touch). */
+  @media (pointer: coarse){
+    .compare-card.after{
+      animation: idle-tilt 7s ease-in-out infinite;
+    }
+    .figure{ animation: idle-tilt-soft 9s ease-in-out infinite; }
+  }
+  @keyframes idle-tilt{
+    0%, 100%{ transform:perspective(900px) rotateX(4deg) rotateY(-7deg); }
+    50%{ transform:perspective(900px) rotateX(-3deg) rotateY(6deg); }
+  }
+  @keyframes idle-tilt-soft{
+    0%, 100%{ transform:perspective(1200px) rotateX(2deg) rotateY(-3deg); }
+    50%{ transform:perspective(1200px) rotateX(-1.5deg) rotateY(2.5deg); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .compare-card.after, .figure{ animation:none !important; }
+  }
+  .compare-tag{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:14px; display:block; }
+  .compare-card.before .compare-tag{ color:var(--muted-dim); }
+  .compare-card.after .compare-tag{ color:var(--red-bright); }
+  .compare-line{ font-size:13.5px; line-height:1.6; color:var(--muted); margin:0; }
+  .compare-card.before .compare-line strong{ color:var(--ink); font-weight:600; }
+  .after-lead{ font-size:14px; font-weight:600; margin-bottom:2px; }
+  .after-meta{ font-size:12px; color:var(--muted-dim); margin-bottom:18px; }
+  .score-line{ display:flex; align-items:baseline; gap:10px; margin-bottom:16px; }
+  .score-num{ font-family:'IBM Plex Mono',monospace; font-size:34px; font-weight:600; color:var(--red-bright); }
+  .score-word{ font-size:12px; letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); }
+  .factor-row{ display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:11px; }
+  .factor-label{ width:76px; color:var(--muted-dim); flex-shrink:0; }
+  .factor-track{ flex:1; height:3px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; }
+  .factor-fill{ height:100%; background:var(--red-bright); }
+  .factor-val{ width:20px; text-align:right; color:var(--muted); }
+  .after-verdict{ margin-top:16px; padding-top:14px; border-top:1px solid var(--border); font-size:13px; }
+  .after-verdict b{ color:var(--ink); font-weight:600; }
+
+  /* ---------- SEC PAD ---------- */
+  .sec-pad{ padding:90px 0; }
+  .sec-band{ border-top:1px solid var(--line); }
+
+  /* ---------- STATEMENT (Problem, reframed) ---------- */
+  .statement h2{ font-size:38px; line-height:1.28; font-weight:600; max-width:820px; margin:0 0 40px; }
+  .statement h2 em{ font-style:normal; color:var(--red-bright); font-weight:700; }
+  .statement-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:0; border-top:1px solid var(--line); }
+  .statement-item{ padding:24px 28px 0 0; border-right:1px solid var(--line); }
+  .statement-item:last-child{ border-right:none; }
+  .statement-item p{ font-size:13.8px; color:var(--muted); line-height:1.6; margin:0; }
+  .statement-item .k{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--red-bright); margin-bottom:8px; display:block; }
+
+  /* ---------- STEPS ---------- */
+  .steps{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-top:1px solid var(--line); }
+  .step{ padding:30px 26px 0 0; border-right:1px solid var(--line); }
+  .step:last-child{ border-right:none; }
+  .step .idx{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--red-bright); margin-bottom:16px; }
+  .step h3{ font-size:16.5px; font-weight:600; margin:0 0 9px; }
+  .step p{ font-size:13.3px; color:var(--muted); line-height:1.6; margin:0; }
+
+  /* ---------- SEC HEAD (general) ---------- */
+  .sec-head{ max-width:640px; margin-bottom:44px; }
+  .sec-head h2{ font-size:32px; font-weight:600; margin:0 0 14px; line-height:1.2; }
+  .sec-head p{ font-size:15px; color:var(--muted); line-height:1.6; margin:0; max-width:520px; }
+
+  /* ---------- DEMO ---------- */
+  .demo-panel{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:34px; }
+  .demo-grid{ display:grid; grid-template-columns:1fr 1fr; gap:40px; }
+  .demo-field{ margin-bottom:15px; }
+  .demo-field label{ display:block; font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:6px; letter-spacing:0.02em; }
+  .demo-field textarea, .demo-field select, .demo-field input{
+    width:100%; border:1px solid var(--border-strong); border-radius:7px; padding:10px 12px; font-size:13.5px;
+    font-family:inherit; background:var(--bg); color:var(--ink); outline:none; transition:border-color .15s;
+  }
+  .demo-field textarea:focus, .demo-field select:focus, .demo-field input:focus{ border-color:var(--red-bright); }
+  .demo-field textarea{ resize:vertical; min-height:76px; }
+  .demo-row2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .result-empty{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; height:100%;
+    color:var(--muted-dim); font-size:13px; padding:40px 20px; gap:10px; border:1px dashed var(--border-strong); border-radius:var(--radius); }
+  .result-box{ display:none; }
+  .result-box.show{ display:block; animation:fadein .3s ease; }
+  @keyframes fadein{ from{opacity:0;} to{opacity:1;} }
+  .cat-word{ font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.05em; text-transform:uppercase; }
+  .reason-line{ font-size:12px; color:var(--muted); margin:2px 0; }
+  .reason-line::before{ content:"— "; color:var(--red-bright); }
+
+  /* ---------- FEATURE LIST (editorial rows, not icon cards) ---------- */
+  .feat-list{ border-top:1px solid var(--line); }
+  .feat-row{ display:grid; grid-template-columns:60px 1fr 1.4fr; gap:28px; padding:28px 0; border-bottom:1px solid var(--line); align-items:baseline; }
+  .feat-row .n{ font-family:'IBM Plex Mono',monospace; color:var(--muted-dim); font-size:13px; }
+  .feat-row h3{ font-size:19px; font-weight:600; margin:0; }
+  .feat-row p{ font-size:14px; color:var(--muted); line-height:1.6; margin:0; }
+  @media (max-width:760px){
+    .feat-row{ grid-template-columns:1fr; gap:8px; }
+    .feat-row .n{ order:1; }
+    .feat-row h3{ order:2; }
+    .feat-row p{ order:3; }
+  }
+
+  /* ---------- PRODUCT FIGURE ---------- */
+  .figure{ border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .fig-body{ padding:28px; display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); }
+  .fig-kpi{ background:var(--surface); padding:20px; }
+  .fig-kpi .lbl{ font-size:11px; color:var(--muted-dim); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.04em; }
+  .fig-kpi .val{ font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:600; }
+  .fig-full{ grid-column:1/-1; background:var(--surface); padding:22px 20px; }
+  .fig-bar-row{ display:flex; align-items:center; gap:12px; margin-bottom:10px; font-size:11.5px; }
+  .fig-bar-row .l{ width:84px; color:var(--muted); flex-shrink:0; }
+  .fig-bar-track{ flex:1; height:14px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .fig-bar-fill{ height:100%; background:var(--red); border-radius:3px; }
+  .fig-caption{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted-dim); padding:14px 4px 0; }
+
+  /* ---------- USE CASES ---------- */
+  .trades-line{ font-size:17px; line-height:1.7; font-family:'IBM Plex Sans',sans-serif; font-weight:500; max-width:760px; }
+  .trades-line b{ font-weight:700; color:var(--red-bright); }
+
+  /* ---------- PRICING ---------- */
+  .price-grid{ display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .price-card{ padding:32px 28px; display:flex; flex-direction:column; border-right:1px solid var(--border); }
+  .price-card:last-child{ border-right:none; }
+  .price-card.featured{ background:var(--surface); }
+  .price-card h3{ font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin:0 0 16px; }
+  .price-card.featured h3{ color:var(--red-bright); }
+  .price-amount{ font-family:'IBM Plex Sans',sans-serif; font-size:38px; font-weight:700; margin-bottom:4px; }
+  .price-amount span{ font-size:14px; font-weight:500; color:var(--muted); }
+  .price-note{ font-size:12.5px; color:var(--muted); margin-bottom:26px; }
+  .price-feats{ list-style:none; padding:0; margin:0 0 28px; display:flex; flex-direction:column; gap:11px; flex:1; }
+  .price-feats li{ font-size:13.3px; color:var(--muted); padding-left:14px; position:relative; }
+  .price-feats li::before{ content:"—"; position:absolute; left:0; color:var(--red-bright); }
+  @media (max-width:820px){ .price-grid{ grid-template-columns:1fr; } .price-card{ border-right:none; border-bottom:1px solid var(--border); } }
+
+  /* ---------- FAQ ---------- */
+  .faq-list{ border-top:1px solid var(--line); }
+  .faq-item{ border-bottom:1px solid var(--line); }
+  .faq-q{ width:100%; text-align:left; background:none; border:none; padding:20px 0; font-size:15px; font-family:'IBM Plex Sans',sans-serif; font-weight:600;
+    display:flex; justify-content:space-between; align-items:center; cursor:pointer; color:var(--ink); }
+  .faq-q .chev{ font-family:'IBM Plex Mono',monospace; font-style:normal; transition:transform .2s; flex-shrink:0; margin-left:20px; color:var(--muted); font-size:14px; }
+  .faq-item.open .chev{ transform:rotate(45deg); }
+  .faq-a{ max-height:0; overflow:hidden; transition:max-height .25s ease; }
+  .faq-a-inner{ padding:0 0 22px; font-size:14px; color:var(--muted); line-height:1.65; max-width:640px; }
+
+  /* ---------- FINAL CTA ---------- */
+  .final-cta{ text-align:left; padding:70px 0; border-top:1px solid var(--line); }
+  .final-cta h2{ font-size:36px; margin:0 0 16px; max-width:600px; }
+  .final-cta h2 em{ color:var(--red-bright); font-style:normal; font-weight:700; }
+  .final-cta p{ color:var(--muted); font-size:15px; margin:0 0 30px; max-width:460px; }
+  .final-ctas{ display:flex; gap:12px; flex-wrap:wrap; }
+
+  /* ---------- BOOKING ---------- */
+  .book-shell{ border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; background:var(--surface); }
+  .book-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--border); }
+  .book-head .lbl{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted-dim); text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:8px; }
+  .book-head .dot{ width:7px; height:7px; border-radius:50%; background:var(--red-bright); box-shadow:0 0 0 3px rgba(255,90,95,0.18); }
+  .book-body{ display:grid; grid-template-columns:280px 1fr; min-height:640px; }
+  .cal-slot{ position:relative; min-height:640px; }
+  .cal-fallback{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:30px; }
+  .cal-fallback p{ font-size:13px; color:var(--muted); max-width:320px; margin:0; line-height:1.6; }
+  .cal-loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--muted-dim); font-family:'IBM Plex Mono',monospace; }
+  .book-agenda{ padding:28px; border-right:1px solid var(--border); }
+  .book-agenda h3{ font-size:19px; margin:0 0 18px; font-weight:600; }
+  .agenda-item{ display:flex; gap:12px; margin-bottom:20px; }
+  .agenda-item .n{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--red-bright); flex-shrink:0; padding-top:2px; }
+  .agenda-item p{ font-size:13.3px; color:var(--muted); line-height:1.55; margin:0; }
+  .agenda-item strong{ color:var(--ink); display:block; margin-bottom:2px; font-size:13.8px; }
+  .book-fine{ font-size:11.5px; color:var(--muted-dim); margin-top:20px; padding-top:18px; border-top:1px solid var(--border); line-height:1.5; }
+  @media (max-width:820px){ .book-body{ grid-template-columns:1fr; } .book-agenda{ border-right:none; border-bottom:1px solid var(--border); } }
+
+  /* ---------- FOOTER ---------- */
+  footer{ padding:50px 0 30px; border-top:1px solid var(--line); position:relative; }
+  .foot-grid{ display:grid; grid-template-columns:1.3fr repeat(3,1fr); gap:32px; margin-bottom:40px; }
+  .foot-brand p{ font-size:13px; color:var(--muted); line-height:1.6; margin:14px 0 0; max-width:250px; }
+  .foot-col h4{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted-dim); margin:0 0 14px; }
+  .foot-col a{ display:block; font-size:13.5px; color:var(--muted); margin-bottom:10px; }
+  .foot-col a:hover{ color:var(--red-bright); }
+  .foot-bottom{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted-dim); padding-top:24px; border-top:1px solid var(--line); flex-wrap:wrap; gap:10px; }
+
+  /* ---------- 3D DEPTH BACKGROUND ---------- */
+  #bg-canvas{ position:fixed; inset:0; z-index:0; pointer-events:none; display:block; }
+  .cookie-banner{ position:fixed; left:16px; right:16px; bottom:16px; z-index:100; max-width:560px;
+    background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--radius);
+    padding:22px 24px; box-shadow:0 20px 50px rgba(0,0,0,0.5); }
+  .cookie-banner h4{ font-size:15px; font-weight:700; margin:0 0 8px; }
+  .cookie-banner p{ font-size:12.8px; color:var(--muted); line-height:1.55; margin:0 0 16px; }
+  .cookie-banner p a{ color:var(--red-bright); text-decoration:underline; }
+  .cookie-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+  .cookie-actions .btn{ padding:9px 16px; font-size:12.5px; }
+  .cookie-settings-link{ font-size:11.5px; color:var(--muted-dim); text-decoration:underline; cursor:pointer; }
+  @media (max-width:480px){ .cookie-banner{ left:10px; right:10px; bottom:10px; padding:18px; } }
+  .reveal{ opacity:0; transform:translateY(16px); transition:opacity .5s ease, transform .5s ease; }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+  [data-tilt]{ transition:transform .15s ease-out; }
+
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior:auto; }
+    .reveal{ opacity:1 !important; transform:none !important; transition:none !important; }
+    [data-tilt]{ transform:none !important; }
+  }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 920px){
+    .hero-grid{ grid-template-columns:1fr; }
+    .hero h1{ font-size:40px; }
+    .compare-stack{ height:340px; margin-top:20px; }
+    .steps, .statement-grid{ grid-template-columns:1fr 1fr; row-gap:26px; }
+    .step, .statement-item{ border-right:none; border-bottom:1px solid var(--line); padding-bottom:20px; }
+    .demo-grid{ grid-template-columns:1fr; }
+    .fig-body{ grid-template-columns:1fr 1fr; }
+    .foot-grid{ grid-template-columns:1fr 1fr; }
+    .nav-links{ display:none; }
+    .nav-toggle{ display:block; }
+    .feat-row{ padding:22px 0; }
+  }
+  @media (max-width: 600px){
+    .hero{ padding:48px 0 60px; }
+    .hero h1{ font-size:32px; }
+    .sec-pad{ padding:56px 0; }
+    .sec-head h2{ font-size:26px; }
+    .statement h2{ font-size:26px; }
+    .steps, .statement-grid, .fig-body, .foot-grid{ grid-template-columns:1fr; }
+    .final-cta h2{ font-size:27px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="brand">
+      <svg class="logo-mark" width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M2 15L7 5" stroke="#3A3230" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M7 17L14 3" stroke="#FF5A5F" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="14" cy="3" r="2" fill="#FF5A5F"/>
+      </svg>
+      Lead <span>Engine</span>
+    </a>
+    <div class="nav-links">
+      <a href="#produkt">Produkt</a>
+      <a href="#demo">Demo</a>
+      <a href="#preise">Preise</a>
+      <a href="#termin">Termin</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="https://calendly.com/faoorahmad53" target="_blank" rel="noopener">Demo-Call</a>
+      <a class="btn btn-accent" href="mailto:ayokyio655@gmail.com?subject=Zugang%20zu%20Lead%20Engine">Zugang anfragen</a>
+      <button class="nav-toggle" aria-label="Menü öffnen" onclick="document.getElementById('mnav').classList.toggle('show')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="#F4F0ED" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="mnav" class="nav-mobile">
+    <a href="#produkt">Produkt</a><a href="#demo">Demo</a><a href="#preise">Preise</a><a href="#termin">Termin</a><a href="#faq">FAQ</a>
+  </div>
+</nav>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <div class="label">Für Handwerksbetriebe</div>
+        <h1>Wer zuerst anruft,<br>bekommt <em>den Auftrag.</em></h1>
+        <p class="hero-sub">Kunden mit einer dringenden Anfrage rufen mehrere Betriebe an. Beauftragt wird meistens der erste, der zurückruft. Lead Engine zeigt Ihnen sofort, welche Anfrage gerade am dringendsten ist, damit Ihr Team zuerst dort anruft.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-accent btn-lg" href="mailto:ayokyio655@gmail.com?subject=Zugang%20zu%20Lead%20Engine">Zugang anfragen</a>
+          <a class="btn btn-ghost btn-lg" href="#demo">Bewertungslogik testen</a>
+        </div>
+        <p class="hero-note">Entwickelt mit SHK- und Elektrobetrieben aus Düsseldorf. Aktuell im Early Access.</p>
+      </div>
+
+      <div class="compare-stack reveal">
+        <div class="compare-card before">
+          <span class="compare-tag">Ohne Lead Engine</span>
+          <p class="compare-line">Anfrage <strong>14:32 Uhr</strong> — Wasserschaden.<br>Rückruf <strong>16:50 Uhr</strong>.<br>Kunde hatte bereits einen anderen Betrieb beauftragt.</p>
+        </div>
+        <div class="compare-card after" data-tilt="6">
+          <span class="compare-tag">Mit Lead Engine</span>
+          <div class="after-lead">Herr Özdemir — Sanitär</div>
+          <div class="after-meta">Wasserrohrbruch im Keller · vor 2 Min</div>
+          <div class="score-line"><span class="score-num">90</span><span class="score-word">/ 100 · Heiß</span></div>
+          <div class="factor-row"><span class="factor-label">Intent</span><div class="factor-track"><div class="factor-fill" style="width:75%"></div></div><span class="factor-val">75</span></div>
+          <div class="factor-row"><span class="factor-label">Dringlichkeit</span><div class="factor-track"><div class="factor-fill" style="width:95%"></div></div><span class="factor-val">95</span></div>
+          <div class="factor-row"><span class="factor-label">Gebiet</span><div class="factor-track"><div class="factor-fill" style="width:100%"></div></div><span class="factor-val">100</span></div>
+          <div class="after-verdict"><b>Empfehlung:</b> innerhalb von 5 Minuten kontaktieren.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATEMENT / PROBLEM -->
+  <section class="sec-pad sec-band">
+    <div class="wrap statement">
+      <div class="label">Die Realität</div>
+      <h2>78 % der Notfall-Aufträge gehen an den Betrieb, <em>der zuerst antwortet</em>.</h2>
+      <div class="statement-grid">
+        <div class="statement-item">
+          <span class="k">01</span>
+          <p>Ein Kunde mit Rohrbruch oder Heizungsausfall ruft meistens mehrere Betriebe an. Beauftragt wird der erste, der zurückruft.</p>
+        </div>
+        <div class="statement-item">
+          <span class="k">02</span>
+          <p>Anfragen kommen über Telefon, WhatsApp, ein Formular und E-Mail gleichzeitig rein. Ohne System sieht niemand, welche gerade am dringendsten ist.</p>
+        </div>
+        <div class="statement-item">
+          <span class="k">03</span>
+          <p>Was durch späte Antworten an Aufträgen verloren geht, taucht in keiner Statistik auf. Es fällt niemandem auf.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="sec-pad" id="produkt">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Der Ablauf</div>
+        <h2>So funktioniert Lead Engine.</h2>
+        <p>Kein zusätzliches Tool, das Ihr Team erst lernen muss — Lead Engine übernimmt die Ersteinschätzung, den Rest macht Ihr Team wie gewohnt.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="idx">01</div>
+          <h3>Anfrage geht ein</h3>
+          <p>Aus Website-Formular, Google Ads, Telefon oder WhatsApp — alles läuft an einem Ort zusammen.</p>
+        </div>
+        <div class="step">
+          <div class="idx">02</div>
+          <h3>Automatische Bewertung</h3>
+          <p>Ein transparentes, regelbasiertes Scoring bewertet Dringlichkeit, Auftragswert, Gebiet und Erreichbarkeit — in unter einer Sekunde.</p>
+        </div>
+        <div class="step">
+          <div class="idx">03</div>
+          <h3>Priorisierte Inbox</h3>
+          <p>Heiße Leads stehen oben. Ihr Team sieht sofort, wo ein Anruf jetzt zählt — und wo Zeit bleibt.</p>
+        </div>
+        <div class="step">
+          <div class="idx">04</div>
+          <h3>Keine Anfrage versickert</h3>
+          <p>Unbeantwortete Anfragen werden markiert, bevor sie zu einem verlorenen Auftrag werden.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE DEMO -->
+  <section class="sec-pad sec-band" id="demo">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Sehen Sie es selbst</div>
+        <h2>Testen Sie die Bewertung selbst.</h2>
+        <p>Dieselbe Bewertungslogik läuft auch im Produkt. Tragen Sie eine Beispielanfrage ein — das Ergebnis ist echt, nicht vorgerechnet.</p>
+      </div>
+      <div class="demo-panel reveal">
+        <div class="demo-grid">
+          <div>
+            <div class="demo-field">
+              <label>Beschreibung der Anfrage</label>
+              <textarea id="d-desc" placeholder="z.B. Unsere Heizung funktioniert seit gestern nicht mehr.">Unsere Heizung funktioniert seit gestern nicht mehr, es ist kalt im ganzen Haus.</textarea>
+            </div>
+            <div class="demo-row2">
+              <div class="demo-field">
+                <label>Gewerk</label>
+                <select id="d-service">
+                  <option>Heizung</option><option>Wärmepumpe</option><option>Sanitär</option><option>Bad</option><option>Klimaanlage</option><option>Elektro</option>
+                </select>
+              </div>
+              <div class="demo-field">
+                <label>Dringlichkeit</label>
+                <select id="d-urgency">
+                  <option value="HIGH">Hoch</option><option value="MEDIUM">Mittel</option><option value="LOW">Niedrig</option>
+                </select>
+              </div>
+            </div>
+            <div class="demo-row2">
+              <div class="demo-field">
+                <label>Telefonnummer</label>
+                <input id="d-phone" value="0176 4432190" />
+              </div>
+              <div class="demo-field">
+                <label>Geschätzter Auftragswert (€)</label>
+                <input id="d-value" type="number" value="900" />
+              </div>
+            </div>
+            <button class="btn btn-accent btn-lg" style="width:100%; margin-top:6px;" onclick="runDemoScore()">Anfrage bewerten</button>
+          </div>
+
+          <div>
+            <div id="d-empty" class="result-empty">
+              <div>Ergebnis erscheint hier.</div>
+            </div>
+            <div id="d-result" class="result-box">
+              <div class="score-line"><span class="score-num" id="d-score">—</span><span class="score-word" id="d-cat">—</span></div>
+              <div id="d-bars"></div>
+              <div class="after-verdict" id="d-rec"><b>Empfehlung:</b> —</div>
+              <div style="margin-top:10px;" id="d-reasons"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="sec-pad">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Was drinsteckt</div>
+        <h2>Diese Funktionen sind enthalten.</h2>
+        <p>Alles, was zwischen eingehender Anfrage und gebuchtem Termin tatsächlich gebraucht wird — nicht mehr.</p>
+      </div>
+      <div class="feat-list">
+        <div class="feat-row">
+          <div class="n">01</div>
+          <h3>AI Inbox</h3>
+          <p>Alle Anfragen, die jetzt eine Reaktion brauchen, an einem Ort — sortiert nach Dringlichkeit, nicht nach Eingangszeit.</p>
+        </div>
+        <div class="feat-row">
+          <div class="n">02</div>
+          <h3>Lead-Bewertung</h3>
+          <p>Sechs nachvollziehbare Faktoren — Intent, Dringlichkeit, Gebiet, Auftragswert, Erreichbarkeit, Spam-Risiko — ergeben einen erklärbaren Score.</p>
+        </div>
+        <div class="feat-row">
+          <div class="n">03</div>
+          <h3>CRM-Pipeline</h3>
+          <p>Neu → Kontaktiert → Qualifiziert → Termin → Angebot → Gewonnen. Per Drag & Drop, immer aktuell.</p>
+        </div>
+        <div class="feat-row">
+          <div class="n">04</div>
+          <h3>Automationen</h3>
+          <p>Regeln nach dem Muster Trigger → Bedingung → Aktion — etwa „Score über 75 → Team sofort benachrichtigen".</p>
+        </div>
+        <div class="feat-row">
+          <div class="n">05</div>
+          <h3>Antwortzeit-Analyse</h3>
+          <p>Wie schnell antworten Sie wirklich — und wie viel Umsatz geht durch verspätete Reaktionen verloren?</p>
+        </div>
+        <div class="feat-row">
+          <div class="n">06</div>
+          <h3>Executive Dashboard</h3>
+          <p>Neue Leads, Termine, gewonnene Aufträge und realer Umsatz — auf einen Blick statt in fünf Tabellen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUCT FIGURE -->
+  <section class="sec-pad sec-band">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Produkt-Ansicht</div>
+        <h2>Das Dashboard im Überblick.</h2>
+        <p>Kein Marketing-Mockup — eine vereinfachte Darstellung der echten Oberfläche.</p>
+      </div>
+      <div class="figure reveal">
+        <div class="fig-body">
+          <div class="fig-kpi"><div class="lbl">Neue Leads</div><div class="val">6</div></div>
+          <div class="fig-kpi"><div class="lbl">Qualifiziert</div><div class="val">9</div></div>
+          <div class="fig-kpi"><div class="lbl">Termine</div><div class="val">2</div></div>
+          <div class="fig-kpi"><div class="lbl">Ø Antwortzeit</div><div class="val">38 Min</div></div>
+          <div class="fig-full">
+            <div style="font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted-dim); margin-bottom:16px;">Conversion Funnel</div>
+            <div class="fig-bar-row"><span class="l">Leads</span><div class="fig-bar-track"><div class="fig-bar-fill" style="width:100%;"></div></div></div>
+            <div class="fig-bar-row"><span class="l">Qualifiziert</span><div class="fig-bar-track"><div class="fig-bar-fill" style="width:64%;"></div></div></div>
+            <div class="fig-bar-row"><span class="l">Termine</span><div class="fig-bar-track"><div class="fig-bar-fill" style="width:36%;"></div></div></div>
+            <div class="fig-bar-row"><span class="l">Gewonnen</span><div class="fig-bar-track"><div class="fig-bar-fill" style="width:14%;"></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fig-caption">Abb. 1 — Wochenübersicht in Lead Engine, Beispieldaten eines SHK-Betriebs</div>
+    </div>
+  </section>
+
+  <!-- USE CASES -->
+  <section class="sec-pad">
+    <div class="wrap">
+      <div class="label">Für Ihr Gewerk</div>
+      <p class="trades-line">Gebaut für Handwerksbetriebe — ob <b>SHK</b>, <b>Elektro</b>, <b>Dach</b>, <b>Sanitär</b>, <b>Bad</b>, <b>Klimaanlage</b>, <b>Fenster</b> oder <b>Maler</b>. Die Bewertungslogik ist auf typische Handwerksanfragen zugeschnitten, von der Notfallreparatur bis zur langfristigen Sanierung.</p>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="sec-pad sec-band" id="preise">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Preise</div>
+        <h2>Preise</h2>
+        <p>Lead Engine ist aktuell im Early Access. Diese Preise gelten für Betriebe, die jetzt einsteigen.</p>
+      </div>
+      <div class="price-grid reveal">
+        <div class="price-card">
+          <h3>Starter</h3>
+          <div class="price-amount">€49<span>/ Monat</span></div>
+          <div class="price-note">Für einzelne Betriebe mit einem Servicegebiet</div>
+          <ul class="price-feats">
+            <li>Bis zu 150 Leads / Monat</li>
+            <li>Automatische Lead-Bewertung</li>
+            <li>AI Inbox & CRM-Pipeline</li>
+            <li>1 Automationsregel</li>
+            <li>1 Benutzerkonto</li>
+          </ul>
+          <a class="btn btn-ghost" href="mailto:ayokyio655@gmail.com?subject=Starter%20Plan%20-%20Lead%20Engine">Zugang anfragen</a>
+        </div>
+        <div class="price-card featured">
+          <h3>Pro — am meisten gewählt</h3>
+          <div class="price-amount">€99<span>/ Monat</span></div>
+          <div class="price-note">Für wachsende Teams mit mehreren Gewerken</div>
+          <ul class="price-feats">
+            <li>Bis zu 600 Leads / Monat</li>
+            <li>Alles aus Starter</li>
+            <li>Unbegrenzte Automationsregeln</li>
+            <li>Antwortzeit- & ROI-Analytics</li>
+            <li>Bis zu 5 Benutzerkonten</li>
+          </ul>
+          <a class="btn btn-accent" href="mailto:ayokyio655@gmail.com?subject=Pro%20Plan%20-%20Lead%20Engine">Zugang anfragen</a>
+        </div>
+        <div class="price-card">
+          <h3>Business</h3>
+          <div class="price-amount">€199<span>/ Monat</span></div>
+          <div class="price-note">Für mehrere Standorte oder hohes Volumen</div>
+          <ul class="price-feats">
+            <li>Unbegrenzte Leads</li>
+            <li>Alles aus Pro</li>
+            <li>Mehrere Standorte / Teams</li>
+            <li>Priorisierter Support</li>
+            <li>Unbegrenzte Benutzerkonten</li>
+          </ul>
+          <a class="btn btn-ghost" href="mailto:ayokyio655@gmail.com?subject=Business%20Plan%20-%20Lead%20Engine">Zugang anfragen</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOOKING -->
+  <section class="sec-pad" id="termin">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Persönliches Gespräch</div>
+        <h2>Termin vereinbaren</h2>
+        <p>Buchen Sie sich einen freien Termin — wir zeigen Ihnen Lead Engine live an Ihren eigenen Anfragen.</p>
+      </div>
+      <div class="book-shell reveal">
+        <div class="book-head">
+          <span class="lbl"><span class="dot"></span> Verfügbare Termine</span>
+          <span class="lbl" style="color:var(--muted);">Antwort meist innerhalb von 24h</span>
+        </div>
+        <div class="book-body">
+          <div class="book-agenda">
+            <h3>Ablauf des Gesprächs</h3>
+            <div class="agenda-item">
+              <span class="n">01</span>
+              <p><strong>Kurzer Überblick</strong>Sie schildern, wie Anfragen bei Ihnen aktuell reinkommen.</p>
+            </div>
+            <div class="agenda-item">
+              <span class="n">02</span>
+              <p><strong>Live an echten Beispielen</strong>Wir bewerten gemeinsam zwei, drei Ihrer letzten Anfragen.</p>
+            </div>
+            <div class="agenda-item">
+              <span class="n">03</span>
+              <p><strong>Ehrliche Einschätzung</strong>Wenn es nicht passt, sagen wir das auch so.</p>
+            </div>
+            <div class="book-fine">20 Minuten, ohne Verkaufsdruck. Sie entscheiden danach, ob es weitergeht.</div>
+          </div>
+          <div class="cal-slot" id="cal-slot">
+            <div class="cal-loading" id="cal-loading" style="display:none;">Kalender wird geladen …</div>
+            <div class="calendly-inline-widget"
+                 id="calendly-embed"
+                 data-url="https://calendly.com/faoorahmad53?background_color=131011&text_color=f4f0ed&primary_color=ff5a5f&hide_gdpr_banner=1"
+                 style="min-width:280px; height:640px; position:relative; z-index:2;"></div>
+            <div class="cal-fallback" id="cal-consent-needed" style="display:flex;">
+              <p>Um den Kalender direkt hier zu laden, müssen Sie externen Inhalten (Calendly) zustimmen — dabei wird Ihre IP-Adresse an Calendly übertragen.</p>
+              <a class="btn btn-accent" href="#" onclick="cookieConsent(true); return false;">Zustimmen &amp; Kalender laden</a>
+              <a class="btn btn-ghost" href="https://calendly.com/faoorahmad53" target="_blank" rel="noopener">Stattdessen direkt bei Calendly öffnen</a>
+            </div>
+            <div class="cal-fallback" id="cal-fallback" style="display:none;">
+              <p>Der Kalender lädt hier nicht direkt. Das passiert typischerweise, wenn die Seite lokal als Datei geöffnet wird statt über eine Web-Adresse. Sie können trotzdem direkt buchen:</p>
+              <a class="btn btn-accent" href="https://calendly.com/faoorahmad53" target="_blank" rel="noopener">Termin auf Calendly öffnen</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="sec-pad sec-band" id="faq">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="label">Häufige Fragen</div>
+        <h2>Häufige Fragen</h2>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">Ist das echte KI oder feste Regeln? <span class="chev">＋</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Die Bewertungs-Engine arbeitet regelbasiert und nachvollziehbar — nicht mit einem Black-Box-Sprachmodell. Genau deshalb lässt sich jeder Score erklären: Sie sehen immer, warum ein Lead als heiß oder kalt eingestuft wurde. Generative KI für automatisch formulierte Antworten ist in Vorbereitung.</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">Für welche Gewerke ist das gedacht? <span class="chev">＋</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Aktuell optimiert für SHK, Elektro, Dach, Sanitär, Bad, Klimaanlage, Fenster und Maler-Betriebe — Gewerke mit klar erkennbarer Dringlichkeit und Servicegebiet.</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">Brauche ich technisches Know-how? <span class="chev">＋</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Nein. Die Einrichtung läuft über ein geführtes Onboarding: Betriebsdaten, Gewerke und Servicegebiet werden einmalig hinterlegt, danach läuft die Bewertung automatisch.</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">Gibt es eine Mindestlaufzeit? <span class="chev">＋</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Nein. Sie können jederzeit kündigen. Ihre Daten bleiben auch danach einsehbar — es werden lediglich kostenpflichtige Funktionen deaktiviert.</div></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">Wie starte ich? <span class="chev">＋</span></button>
+          <div class="faq-a"><div class="faq-a-inner">Lead Engine befindet sich im Early Access. Schreiben Sie uns über „Zugang anfragen" oder buchen Sie direkt einen Termin — wir richten es gemeinsam mit Ihnen ein.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="wrap final-cta">
+    <h2>Bereit anzufangen?</h2>
+    <p>Fragen Sie jetzt Zugang zum Early Access an — wir richten Lead Engine gemeinsam mit Ihnen für Ihren Betrieb ein.</p>
+    <div class="final-ctas">
+      <a class="btn btn-accent btn-lg" href="mailto:ayokyio655@gmail.com?subject=Zugang%20zu%20Lead%20Engine">Zugang anfragen</a>
+      <a class="btn btn-ghost btn-lg" href="https://calendly.com/faoorahmad53" target="_blank" rel="noopener">Termin buchen</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand">
+          <svg class="logo-mark" width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M2 15L7 5" stroke="#3A3230" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M7 17L14 3" stroke="#FF5A5F" stroke-width="2.4" stroke-linecap="round"/>
+            <circle cx="14" cy="3" r="2" fill="#FF5A5F"/>
+          </svg>
+          Lead <span>Engine</span>
+        </div>
+        <p>Automatische Priorisierung eingehender Anfragen für Handwerksbetriebe.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Produkt</h4>
+        <a href="#produkt">Ablauf</a>
+        <a href="#demo">Demo</a>
+        <a href="#preise">Preise</a>
+      </div>
+      <div class="foot-col">
+        <h4>Unternehmen</h4>
+        <a href="mailto:ayokyio655@gmail.com">Kontakt</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <div class="foot-col">
+        <h4>Rechtliches</h4>
+        <a href="impressum.html">Impressum</a>
+        <a href="datenschutz.html">Datenschutz</a>
+        <a href="#" onclick="reopenCookieBanner(); return false;">Cookie-Einstellungen</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Lead Engine. Alle Rechte vorbehalten.</span>
+      <span>Made in Düsseldorf</span>
+    </div>
+  </div>
+</footer>
+
+<div class="cookie-banner" id="cookie-banner" role="dialog" aria-label="Cookie-Einstellungen">
+  <h4>Wir verwenden externe Inhalte</h4>
+  <p>Diese Seite lädt Schriftarten von Google Fonts und die Terminbuchung von Calendly nach. Beide übertragen dabei Ihre IP-Adresse an den jeweiligen Anbieter. Mehr dazu in unserer <a href="datenschutz.html">Datenschutzerklärung</a>.</p>
+  <div class="cookie-actions">
+    <a class="btn btn-accent" href="#" onclick="cookieConsent(true); return false;">Akzeptieren</a>
+    <a class="btn btn-ghost" href="#" onclick="cookieConsent(false); return false;">Nur notwendige</a>
+  </div>
+</div>
+
+<script>
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function openCalendly(e){
+    if (e) e.preventDefault();
+    window.open('https://calendly.com/faoorahmad53', '_blank', 'noopener');
+    return false;
+  }
+
+  // ---- Cookie consent: gates Google Fonts + Calendly (both send the visitor's
+  // IP address to a third party, which under GDPR requires prior consent). ----
+  const CONSENT_KEY = 'lead_engine_cookie_consent'; // stored value: "all" | "necessary"
+
+  function loadGoogleFonts(){
+    if (document.getElementById('google-fonts-link')) return;
+    const link = document.createElement('link');
+    link.id = 'google-fonts-link';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap';
+    document.head.appendChild(link);
+  }
+
+  function loadCalendlyAssets(onReady){
+    if (document.getElementById('calendly-css')) { onReady && onReady(); return; }
+    const css = document.createElement('link');
+    css.id = 'calendly-css';
+    css.rel = 'stylesheet';
+    css.href = 'https://assets.calendly.com/assets/external/widget.css';
+    document.head.appendChild(css);
+
+    const script = document.createElement('script');
+    script.id = 'calendly-js';
+    script.src = 'https://assets.calendly.com/assets/external/widget.js';
+    script.onload = () => onReady && onReady();
+    document.body.appendChild(script);
+  }
+
+  function applyConsent(choice){
+    localStorage.setItem(CONSENT_KEY, choice);
+    document.getElementById('cookie-banner').style.display = 'none';
+    if (choice === 'all'){
+      loadGoogleFonts();
+      const needed = document.getElementById('cal-consent-needed');
+      if (needed) needed.style.display = 'none';
+      const loading = document.getElementById('cal-loading');
+      if (loading) loading.style.display = 'flex';
+      loadCalendlyAssets(startCalendlyWatchdog);
+    }
+  }
+
+  function cookieConsent(acceptAll){
+    applyConsent(acceptAll ? 'all' : 'necessary');
+  }
+
+  function reopenCookieBanner(){
+    document.getElementById('cookie-banner').style.display = 'block';
+  }
+
+  function initConsent(){
+    const stored = localStorage.getItem(CONSENT_KEY);
+    const banner = document.getElementById('cookie-banner');
+    if (stored === 'all' || stored === 'necessary'){
+      banner.style.display = 'none';
+      if (stored === 'all'){
+        loadGoogleFonts();
+        const needed = document.getElementById('cal-consent-needed');
+        if (needed) needed.style.display = 'none';
+        const loading = document.getElementById('cal-loading');
+        if (loading) loading.style.display = 'flex';
+        loadCalendlyAssets(startCalendlyWatchdog);
+      }
+    } else {
+      banner.style.display = 'block';
+    }
+  }
+
+  function startCalendlyWatchdog(){
+    const slot = document.getElementById('calendly-embed');
+    const loading = document.getElementById('cal-loading');
+    const fallback = document.getElementById('cal-fallback');
+    if (!slot) return;
+    function iframeReady(){ return !!slot.querySelector('iframe'); }
+    const observer = new MutationObserver(()=>{
+      if (iframeReady()){ if (loading) loading.style.display = 'none'; observer.disconnect(); }
+    });
+    observer.observe(slot, { childList:true, subtree:true });
+    setTimeout(()=>{
+      if (!iframeReady()){
+        observer.disconnect();
+        if (loading) loading.style.display = 'none';
+        if (fallback) fallback.style.display = 'flex';
+      }
+    }, 4500);
+  }
+
+  initConsent();
+
+  // ---- 3D depth background ----
+  // Self-contained Canvas2D pseudo-3D field. Deliberately not a library
+  // (no Three.js/WebGL) so it never triggers a third-party network request
+  // and never needs to go through cookie consent.
+  (function initDepthBackground(){
+    const canvas = document.getElementById('bg-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let w, h, dpr;
+    let particles = [];
+    let mouseX = 0, mouseY = 0, targetMouseX = 0, targetMouseY = 0;
+    let scrollParallax = 0, targetScrollParallax = 0;
+    let isTouch = window.matchMedia('(pointer: coarse)').matches;
+    let running = true;
+    let rafId = null;
+
+    const COUNT_BASE = 46; // scaled by area below, boosted further on small/touch screens
+
+    function resize(){
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    }
+
+    function seed(){
+      // Mobile screens are narrower but the effect needs to read clearly in
+      // less space, so we don't scale density down as aggressively there.
+      const areaRatio = (w * h) / (1440 * 900);
+      const minRatio = isTouch ? 0.85 : 0.6;
+      const count = Math.round(COUNT_BASE * Math.max(minRatio, Math.min(1.6, areaRatio)));
+      particles = [];
+      for (let i = 0; i < count; i++){
+        const depth = 0.15 + Math.random() * 0.85; // 0.15 (far) .. 1 (near)
+        particles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          depth,
+          size: 10 + depth * 26,
+          angle: (Math.random() * 0.6 - 0.3), // slight rotation, varied per card
+          vx: (0.06 + depth * 0.22) * (Math.random() > 0.5 ? 1 : -0.4),
+          vy: (0.05 + depth * 0.16),
+          hot: Math.random() < 0.12,
+        });
+      }
+    }
+
+    function draw(){
+      ctx.clearRect(0, 0, w, h);
+      mouseX += (targetMouseX - mouseX) * 0.04;
+      mouseY += (targetMouseY - mouseY) * 0.04;
+      scrollParallax += (targetScrollParallax - scrollParallax) * 0.06;
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < -60) p.x = w + 60; else if (p.x > w + 60) p.x = -60;
+        if (p.y < -60) p.y = h + 60; else if (p.y > h + 60) p.y = -60;
+
+        const parallaxX = mouseX * p.depth * 26;
+        const parallaxY = mouseY * p.depth * 18 + scrollParallax * p.depth * 0.6;
+        const drawX = p.x + parallaxX;
+        const drawY = p.y + parallaxY;
+        const alpha = (isTouch ? 0.09 : 0.04) + p.depth * (isTouch ? 0.22 : 0.16);
+
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        ctx.rotate(p.angle);
+        ctx.strokeStyle = p.hot
+          ? `rgba(255,90,95,${alpha + 0.08})`
+          : `rgba(244,240,237,${alpha})`;
+        ctx.lineWidth = 1.1;
+        const s = p.size;
+        ctx.strokeRect(-s / 2, -s * 0.32, s, s * 0.64);
+        // small notch line, like a folded corner of a request card
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.18, -s * 0.32);
+        ctx.lineTo(-s * 0.18, s * 0.1);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      if (running) rafId = requestAnimationFrame(draw);
+    }
+
+    function handleMouse(e){
+      targetMouseX = (e.clientX / w - 0.5) * 2;
+      targetMouseY = (e.clientY / h - 0.5) * 2;
+    }
+
+    function handleScroll(){
+      // Drives depth motion from scroll position too, so touch devices
+      // (which never fire mousemove) still get a real parallax effect.
+      targetScrollParallax = window.scrollY * 0.06;
+    }
+
+    if (prefersReducedMotion){
+      // Draw a single static frame, no animation loop, no mouse/scroll tracking.
+      resize();
+      running = false;
+      draw();
+      window.addEventListener('resize', () => { resize(); draw(); });
+      return;
+    }
+
+    resize();
+    draw();
+    window.addEventListener('resize', resize);
+    window.addEventListener('mousemove', handleMouse, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden){
+        running = false;
+        if (rafId) cancelAnimationFrame(rafId);
+      } else if (!running){
+        running = true;
+        draw();
+      }
+    });
+  })();
+
+  // ---- Scroll reveal ----
+  document.querySelectorAll('.reveal').forEach((el, i) => { el.style.transitionDelay = (i % 4) * 0.05 + 's'; });
+  if (!prefersReducedMotion && 'IntersectionObserver' in window){
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold:0.1, rootMargin:'0px 0px -30px 0px' });
+    document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+  } else {
+    document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in'));
+  }
+
+  // ---- Subtle tilt on the "after" card only ----
+  document.querySelectorAll('[data-tilt]').forEach(el=>{
+    if (prefersReducedMotion) return;
+    el.addEventListener('mousemove', (e)=>{
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+      const deg = parseFloat(el.getAttribute('data-tilt')) || 5;
+      el.style.transform = `perspective(1000px) rotateX(${(0.5-py)*deg}deg) rotateY(${(px-0.5)*deg}deg)`;
+    });
+    el.addEventListener('mouseleave', ()=>{ el.style.transform = ''; });
+  });
+
+  // ---- Nav hide on scroll ----
+  (function(){
+    const nav = document.querySelector('.nav');
+    let lastY = window.scrollY, ticking = false;
+    function onScroll(){
+      const y = window.scrollY;
+      nav.classList.toggle('nav-scrolled', y > 8);
+      if (y > lastY && y > 120){ nav.classList.add('nav-hidden'); } else { nav.classList.remove('nav-hidden'); }
+      lastY = y; ticking = false;
+    }
+    window.addEventListener('scroll', ()=>{ if(!ticking){ requestAnimationFrame(onScroll); ticking = true; } }, { passive:true });
+  })();
+
+  // ---- FAQ accordion ----
+  function toggleFaq(btn){
+    const item = btn.parentElement;
+    const answer = item.querySelector('.faq-a');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i=>{ i.classList.remove('open'); i.querySelector('.faq-a').style.maxHeight = null; });
+    if(!isOpen){ item.classList.add('open'); answer.style.maxHeight = answer.scrollHeight + 'px'; }
+  }
+
+  // ---- REAL scoring engine, ported 1:1 from the Lead Engine product ----
+  const URGENCY_KEYWORDS = ["ausgefallen","seit gestern","sofort","notfall","dringend","kein wasser","kein strom","leck","bruch","kaputt","läuft nicht mehr","steht wasser"];
+  const SPAM_PATTERNS = [/^test/i, /asdf/i, /1234/i, /xxx/i];
+  const clamp = (n, min=0, max=100) => Math.max(min, Math.min(max, n));
+  const demoCompany = { services: ["Heizung","Wärmepumpe","Sanitär","Bad","Klimaanlage","Elektro"] };
+  const AVG_DEAL_VALUE = 3200;
+
+  function scoreIntent(input){
+    let s = 40; const text = input.description.toLowerCase();
+    if (text.length > 25) s += 15;
+    if (input.estimatedValue) s += 10;
+    if (URGENCY_KEYWORDS.some(k => text.includes(k))) s += 20;
+    if (SPAM_PATTERNS.some(p => p.test(text))) s -= 60;
+    return clamp(s);
+  }
+  function scoreUrgency(input){
+    const base = { HIGH:85, MEDIUM:50, LOW:20 }[input.urgency];
+    const bonus = URGENCY_KEYWORDS.some(k => input.description.toLowerCase().includes(k)) ? 10 : 0;
+    return clamp(base + bonus);
+  }
+  function scoreFit(input, company){
+    let s = 0;
+    s += company.services.some(svc => svc.toLowerCase() === input.service.toLowerCase()) ? 55 : 0;
+    s += 45;
+    return clamp(s);
+  }
+  function scoreValue(input, avg){
+    if (!input.estimatedValue) return 30;
+    return clamp(40 + (input.estimatedValue/Math.max(avg,1))*40);
+  }
+  function scoreContactability(input){
+    let s = 0;
+    if (/\d{6,}/.test(input.customerPhone) && input.customerPhone !== "0000000000") s += 60;
+    s += 40;
+    return clamp(s);
+  }
+  function scoreSpamRisk(input){
+    let risk = 0; const text = input.description.toLowerCase();
+    if (SPAM_PATTERNS.some(p => p.test(text))) risk += 70;
+    if (input.customerPhone === "0000000000") risk += 40;
+    if (text.trim().length < 8) risk += 20;
+    return clamp(risk);
+  }
+  function buildReasons(b){
+    const r = [];
+    if (b.intent >= 75) r.push("Hohe Kaufabsicht");
+    if (b.urgency >= 75) r.push("Dringend");
+    if (b.fit >= 80) r.push("Servicegebiet passt");
+    if (b.value >= 70) r.push("Hoher Auftragswert");
+    if (b.contactability < 40) r.push("Schwer erreichbar");
+    if (b.spamRisk >= 50) r.push("Spam-Risiko");
+    if (b.fit < 30) r.push("Außerhalb des Gebiets");
+    return r;
+  }
+  function buildRecommendation(overall, spamRisk){
+    if (spamRisk >= 60) return "Wahrscheinlich Spam — manuell prüfen.";
+    if (overall >= 85) return "Innerhalb von 5 Minuten kontaktieren.";
+    if (overall >= 65) return "Innerhalb von 1 Stunde kontaktieren.";
+    if (overall >= 40) return "Standard-Follow-up innerhalb 24h.";
+    return "Niedrige Priorität — Nurture-Sequenz.";
+  }
+  function computeLeadScore(input, company, avgDealValue){
+    const intent = scoreIntent(input), urgency = scoreUrgency(input), fit = scoreFit(input, company);
+    const value = scoreValue(input, avgDealValue), contactability = scoreContactability(input), spamRisk = scoreSpamRisk(input);
+    const weighted = intent*0.28 + urgency*0.22 + fit*0.22 + value*0.13 + contactability*0.15;
+    const overall = clamp(Math.round(weighted - spamRisk*0.5));
+    const partial = { overall, intent, urgency, fit, value, contactability, spamRisk };
+    return { ...partial, reasons: buildReasons(partial), recommendation: buildRecommendation(overall, spamRisk) };
+  }
+  function categoryFromScore(score){
+    if (score.spamRisk >= 60 || score.fit < 20) return "Unqualifiziert";
+    if (score.overall >= 75) return "Heiß";
+    if (score.overall >= 45) return "Warm";
+    return "Kalt";
+  }
+
+  function runDemoScore(){
+    const input = {
+      description: document.getElementById('d-desc').value || "",
+      service: document.getElementById('d-service').value,
+      urgency: document.getElementById('d-urgency').value,
+      customerPhone: document.getElementById('d-phone').value || "",
+      estimatedValue: parseFloat(document.getElementById('d-value').value) || null,
+    };
+    const score = computeLeadScore(input, demoCompany, AVG_DEAL_VALUE);
+    const cat = categoryFromScore(score);
+
+    document.getElementById('d-empty').style.display = 'none';
+    document.getElementById('d-result').classList.add('show');
+    document.getElementById('d-score').textContent = score.overall;
+    document.getElementById('d-cat').textContent = '/ 100 · ' + cat;
+
+    const bars = [
+      ['Intent', score.intent], ['Dringlichkeit', score.urgency], ['Gebiet', score.fit],
+      ['Wert', score.value], ['Erreichbarkeit', score.contactability], ['Spam-Risiko', score.spamRisk]
+    ];
+    document.getElementById('d-bars').innerHTML = bars.map(([label, val])=>{
+      return `<div class="factor-row"><span class="factor-label">${label}</span><div class="factor-track"><div class="factor-fill" style="width:${val}%;"></div></div><span class="factor-val">${val}</span></div>`;
+    }).join('');
+
+    document.getElementById('d-rec').innerHTML = '<b>Empfehlung:</b> ' + score.recommendation;
+    document.getElementById('d-reasons').innerHTML = score.reasons.map(r=>`<div class="reason-line">${r}</div>`).join('') || '<div class="reason-line" style="opacity:0.6;">Keine besonderen Signale erkannt.</div>';
+  }
+
+  window.addEventListener('DOMContentLoaded', runDemoScore);
+</script>
+
+</body>
+</html>
